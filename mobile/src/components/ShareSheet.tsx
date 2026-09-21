@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { MapShare, SharePermission } from '../types';
 
@@ -25,7 +26,6 @@ type Props = {
   onStopOwnedShare: () => void;
   onOpenSharedMap: (codeOrLink: string) => void;
   onLeaveSharedMap: () => void;
-  onOpenImageShare: () => void;
 };
 
 function shareLink(code: string) {
@@ -46,8 +46,8 @@ export function ShareSheet({
   onStopOwnedShare,
   onOpenSharedMap,
   onLeaveSharedMap,
-  onOpenImageShare,
 }: Props) {
+  const insets = useSafeAreaInsets();
   const [permission, setPermission] = useState<SharePermission>('read');
   const [codeInput, setCodeInput] = useState('');
   const [confirmingStop, setConfirmingStop] = useState(false);
@@ -72,7 +72,7 @@ export function ShareSheet({
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
       <Pressable accessibilityLabel="Fechar compartilhamento" onPress={onClose} style={styles.backdrop} />
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.handle} />
         <View style={styles.headingRow}>
           <View style={styles.headingCopy}>
@@ -99,16 +99,6 @@ export function ShareSheet({
               </Pressable>
             </View>
           ) : null}
-
-          <View style={styles.imageShareBox}>
-            <View style={styles.imageShareCopy}>
-              <Text style={styles.imageShareTitle}>Compartilhar nas redes sociais</Text>
-              <Text style={styles.helper}>Crie uma imagem com as cidades pintadas para suas redes sociais.</Text>
-            </View>
-            <Pressable accessibilityRole="button" onPress={onOpenImageShare} style={styles.imageShareButton}>
-              <Text style={styles.imageShareButtonText}>Criar imagem</Text>
-            </Pressable>
-          </View>
 
           <Text style={styles.sectionLabel}>Compartilhar meu mapa</Text>
           <Text style={styles.fieldLabel}>Permissão do convite</Text>
@@ -201,7 +191,7 @@ export function ShareSheet({
 
 const styles = StyleSheet.create({
   backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(13, 31, 19, 0.34)' },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '90%', paddingHorizontal: 22, paddingTop: 10, paddingBottom: 28, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#FBFCF8' },
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '90%', paddingHorizontal: 22, paddingTop: 10, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#FBFCF8' },
   handle: { alignSelf: 'center', width: 42, height: 5, borderRadius: 3, backgroundColor: '#C7D1C7', marginBottom: 17 },
   headingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 6 },
   headingCopy: { flex: 1 },
@@ -240,9 +230,4 @@ const styles = StyleSheet.create({
   activeBox: { marginTop: 10, padding: 14, borderRadius: 16, backgroundColor: '#EDF5F8', borderWidth: 1, borderColor: '#C9DEE6' },
   activeTitle: { fontSize: 17, fontWeight: '800', color: '#28576A' },
   message: { marginTop: 12, textAlign: 'center', color: '#805127', fontWeight: '700' },
-  imageShareBox: { marginTop: 16, padding: 14, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF6E7', borderWidth: 1, borderColor: '#ECD5AC' },
-  imageShareCopy: { flex: 1 },
-  imageShareTitle: { marginBottom: 3, color: '#704819', fontSize: 15, fontWeight: '900' },
-  imageShareButton: { minHeight: 42, paddingHorizontal: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#D98117' },
-  imageShareButtonText: { color: '#FFFFFF', fontWeight: '900' },
 });

@@ -1,7 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -9,7 +8,7 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
-import Svg, { Path, Text as SvgText } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
 import type { MunicipalityFeature, MunicipalityFeatureCollection } from '../types';
 
@@ -22,6 +21,8 @@ type MapShape = {
   label: Point;
   area: number;
   labelMinZoom: number;
+  polygons: Point[][][];
+  hitBounds: Bounds;
 };
 
 const MIN_ZOOM = 1;
@@ -92,6 +93,22 @@ function pointInRing(point: Point, ring: Point[]) {
   return inside;
 }
 
+function shapeContainsPoint(shape: MapShape, point: Point) {
+  const { hitBounds } = shape;
+  if (
+    point.x < hitBounds.minX
+    || point.x > hitBounds.minX + hitBounds.width
+    || point.y < hitBounds.minY
+    || point.y > hitBounds.minY + hitBounds.height
+  ) return false;
+
+  return shape.polygons.some(([outerRing, ...holes]) =>
+    Boolean(outerRing)
+    && pointInRing(point, outerRing)
+    && !holes.some((hole) => pointInRing(point, hole)),
+  );
+}
+
 function squaredDistanceToSegment(point: Point, start: Point, end: Point) {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -152,14 +169,23 @@ function buildVectorMap(map: MunicipalityFeatureCollection): { shapes: MapShape[
         ? [feature.geometry.coordinates]
         : feature.geometry.coordinates;
 
-    for (const rings of polygons) {
+    const projectedPolygons = polygons.map((rings) => rings.map((ring) => ring.map(projected)));
+    let shapeMinX = Number.POSITIVE_INFINITY;
+    let shapeMinY = Number.POSITIVE_INFINITY;
+    let shapeMaxX = Number.NEGATIVE_INFINITY;
+    let shapeMaxY = Number.NEGATIVE_INFINITY;
+
+    for (const rings of projectedPolygons) {
       for (const ring of rings) {
-        for (const coordinate of ring) {
-          const point = projected(coordinate);
+        for (const point of ring) {
           minX = Math.min(minX, point.x);
           minY = Math.min(minY, point.y);
           maxX = Math.max(maxX, point.x);
           maxY = Math.max(maxY, point.y);
+          shapeMinX = Math.min(shapeMinX, point.x);
+          shapeMinY = Math.min(shapeMinY, point.y);
+          shapeMaxX = Math.max(shapeMaxX, point.x);
+          shapeMaxY = Math.max(shapeMaxY, point.y);
         }
       }
     }
@@ -177,13 +203,20 @@ function buildVectorMap(map: MunicipalityFeatureCollection): { shapes: MapShape[
       label: interiorLabelPoint(labelRing),
       area: Math.abs(ringArea(labelRing)),
       labelMinZoom: MIN_ZOOM,
+      polygons: projectedPolygons,
+      hitBounds: {
+        minX: shapeMinX,
+        minY: shapeMinY,
+        width: shapeMaxX - shapeMinX,
+        height: shapeMaxY - shapeMinY,
+      },
     };
   });
 
   [...shapes]
     .sort((first, second) => second.area - first.area)
     .forEach((shape, index) => {
-      shape.labelMinZoom = index < 28 ? 1 : index < 90 ? 2 : index < 210 ? 3.5 : 5;
+      shape.labelMinZoom = index < 18 ? 1 : index < 65 ? 2.25 : index < 170 ? 3.75 : 5.25;
     });
 
   const horizontalPadding = (maxX - minX) * 0.04;
@@ -212,6 +245,69 @@ function clampCenter(center: Point, bounds: Bounds, zoom: number): Point {
     x: Math.min(maxCenterX, Math.max(minCenterX, center.x)),
     y: Math.min(maxCenterY, Math.max(minCenterY, center.y)),
   };
+}
+
+function screenToMapPoint(
+  screenPoint: Point,
+  layout: { width: number; height: number },
+  bounds: Bounds,
+  center: Point,
+  zoom: number,
+) {
+  const visibleWidth = bounds.width / zoom;
+  const visibleHeight = bounds.height / zoom;
+  const scale = Math.min(layout.width / visibleWidth, layout.height / visibleHeight);
+  const renderedWidth = visibleWidth * scale;
+  const renderedHeight = visibleHeight * scale;
+  const offsetX = (layout.width - renderedWidth) / 2;
+  const offsetY = (layout.height - renderedHeight) / 2;
+
+  if (
+    screenPoint.x < offsetX
+    || screenPoint.x > offsetX + renderedWidth
+    || screenPoint.y < offsetY
+    || screenPoint.y > offsetY + renderedHeight
+  ) return null;
+
+  return {
+    x: center.x - visibleWidth / 2 + (screenPoint.x - offsetX) / scale,
+    y: center.y - visibleHeight / 2 + (screenPoint.y - offsetY) / scale,
+  };
+}
+
+function mapUnitsPerPixel(
+  layout: { width: number; height: number },
+  bounds: Bounds,
+  zoom: number,
+) {
+  const visibleWidth = bounds.width / zoom;
+  const visibleHeight = bounds.height / zoom;
+  const scale = Math.min(layout.width / visibleWidth, layout.height / visibleHeight);
+  return scale > 0 ? 1 / scale : Number.POSITIVE_INFINITY;
+}
+
+function mapToScreenPoint(
+  mapPoint: Point,
+  layout: { width: number; height: number },
+  bounds: Bounds,
+  center: Point,
+  zoom: number,
+) {
+  const visibleWidth = bounds.width / zoom;
+  const visibleHeight = bounds.height / zoom;
+  const scale = Math.min(layout.width / visibleWidth, layout.height / visibleHeight);
+  const renderedWidth = visibleWidth * scale;
+  const renderedHeight = visibleHeight * scale;
+  const offsetX = (layout.width - renderedWidth) / 2;
+  const offsetY = (layout.height - renderedHeight) / 2;
+  return {
+    x: offsetX + (mapPoint.x - (center.x - visibleWidth / 2)) * scale,
+    y: offsetY + (mapPoint.y - (center.y - visibleHeight / 2)) * scale,
+  };
+}
+
+function squaredPointDistance(first: Point, second: Point) {
+  return (first.x - second.x) ** 2 + (first.y - second.y) ** 2;
 }
 
 type Props = {
@@ -251,14 +347,28 @@ function ParanaMapComponent({
   const centerRef = useRef(initialCenter);
   const frameRef = useRef<number | null>(null);
   const pendingTransform = useRef<{ zoom: number; center: Point } | null>(null);
+  const pinchedDuringGesture = useRef(false);
+  const touchStartPoint = useRef<Point | null>(null);
 
   const visibleWidth = vectorMap.bounds.width / zoom;
   const visibleHeight = vectorMap.bounds.height / zoom;
-  const baseLabelUnit = Math.max(
-    vectorMap.bounds.width / layout.width,
-    vectorMap.bounds.height / layout.height,
-  );
   const viewBox = `${center.x - visibleWidth / 2} ${center.y - visibleHeight / 2} ${visibleWidth} ${visibleHeight}`;
+  const visibleLabels = useMemo(() => {
+    if (!showLabels) return [];
+    const minX = center.x - visibleWidth / 2;
+    const maxX = center.x + visibleWidth / 2;
+    const minY = center.y - visibleHeight / 2;
+    const maxY = center.y + visibleHeight / 2;
+    const paddingX = visibleWidth * 0.04;
+    const paddingY = visibleHeight * 0.04;
+    return vectorMap.shapes.filter((shape) =>
+      (shape.cityId === selectedCityId || zoom >= shape.labelMinZoom)
+      && shape.label.x >= minX - paddingX
+      && shape.label.x <= maxX + paddingX
+      && shape.label.y >= minY - paddingY
+      && shape.label.y <= maxY + paddingY,
+    );
+  }, [center.x, center.y, selectedCityId, showLabels, vectorMap.shapes, visibleHeight, visibleWidth, zoom]);
 
   const scheduleTransform = (nextZoom: number, nextCenter: Point) => {
     pendingTransform.current = { zoom: nextZoom, center: nextCenter };
@@ -277,21 +387,51 @@ function ParanaMapComponent({
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
   }, []);
 
+  const selectAtScreenPoint = (screenPoint: Point) => {
+    const mapPoint = screenToMapPoint(
+      screenPoint,
+      layout,
+      vectorMap.bounds,
+      centerRef.current,
+      zoomRef.current,
+    );
+    if (!mapPoint) return;
+    const exactShape = vectorMap.shapes
+      .filter((shape) => shapeContainsPoint(shape, mapPoint))
+      .sort((first, second) => first.area - second.area)[0];
+    const snapPixels = zoomRef.current < 1.75 ? 22 : 30;
+    const snapDistance = mapUnitsPerPixel(layout, vectorMap.bounds, zoomRef.current) * snapPixels;
+    const closestLabelShape = vectorMap.shapes
+      .map((shape) => ({ shape, distance: squaredPointDistance(shape.label, mapPoint) }))
+      .filter(({ distance }) => distance <= snapDistance ** 2)
+      .sort((first, second) => first.distance - second.distance)[0]?.shape;
+
+    // On a phone, many municipalities are smaller than a fingertip. Prefer the
+    // nearest city center inside a small screen-space radius, then fall back to
+    // the mathematically exact polygon.
+    const selectedShape = closestLabelShape ?? exactShape;
+    if (selectedShape) onSelectCity(selectedShape.cityId);
+  };
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: (event) => event.nativeEvent.touches.length >= 2,
-        onMoveShouldSetPanResponder: (event, gesture) =>
-          event.nativeEvent.touches.length >= 2
-          || (zoomRef.current > MIN_ZOOM && Math.abs(gesture.dx) + Math.abs(gesture.dy) > 5),
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: (event) => {
           centerAtGestureStart.current = centerRef.current;
           zoomAtGestureStart.current = zoomRef.current;
           pinchDistanceAtStart.current = touchDistance(event);
+          pinchedDuringGesture.current = event.nativeEvent.touches.length >= 2;
+          const firstTouch = event.nativeEvent.touches[0];
+          touchStartPoint.current = firstTouch
+            ? { x: firstTouch.locationX, y: firstTouch.locationY }
+            : { x: event.nativeEvent.locationX, y: event.nativeEvent.locationY };
         },
         onPanResponderMove: (event, gesture) => {
           const distance = touchDistance(event);
           if (distance !== null) {
+            pinchedDuringGesture.current = true;
             if (pinchDistanceAtStart.current === null) {
               pinchDistanceAtStart.current = distance;
               zoomAtGestureStart.current = zoomRef.current;
@@ -310,22 +450,39 @@ function ParanaMapComponent({
             return;
           }
 
+          if (zoomRef.current <= MIN_ZOOM) return;
+          const gestureVisibleWidth = vectorMap.bounds.width / zoomAtGestureStart.current;
+          const gestureVisibleHeight = vectorMap.bounds.height / zoomAtGestureStart.current;
           const nextCenter = {
-            x: centerAtGestureStart.current.x - (gesture.dx / layout.width) * visibleWidth,
-            y: centerAtGestureStart.current.y - (gesture.dy / layout.height) * visibleHeight,
+            x: centerAtGestureStart.current.x - (gesture.dx / layout.width) * gestureVisibleWidth,
+            y: centerAtGestureStart.current.y - (gesture.dy / layout.height) * gestureVisibleHeight,
           };
           const clampedCenter = clampCenter(nextCenter, vectorMap.bounds, zoomRef.current);
           centerRef.current = clampedCenter;
           scheduleTransform(zoomRef.current, clampedCenter);
         },
-        onPanResponderRelease: () => {
+        onPanResponderRelease: (event, gesture) => {
+          if (
+            !pinchedDuringGesture.current
+            && Math.abs(gesture.dx) < 9
+            && Math.abs(gesture.dy) < 9
+          ) {
+            const changedTouch = event.nativeEvent.changedTouches[0];
+            selectAtScreenPoint(touchStartPoint.current ?? (changedTouch
+              ? { x: changedTouch.locationX, y: changedTouch.locationY }
+              : { x: event.nativeEvent.locationX, y: event.nativeEvent.locationY }));
+          }
           pinchDistanceAtStart.current = null;
+          pinchedDuringGesture.current = false;
+          touchStartPoint.current = null;
         },
         onPanResponderTerminate: () => {
           pinchDistanceAtStart.current = null;
+          pinchedDuringGesture.current = false;
+          touchStartPoint.current = null;
         },
       }),
-    [layout.height, layout.width, vectorMap.bounds, visibleHeight, visibleWidth],
+    [layout.height, layout.width, onSelectCity, vectorMap.bounds, vectorMap.shapes],
   );
 
   const changeZoom = (increment: number) => {
@@ -348,26 +505,21 @@ function ParanaMapComponent({
   };
 
   return (
-    <View {...(displayOnly ? {} : panResponder.panHandlers)} onLayout={handleLayout} style={styles.container}>
-      <View style={styles.watermarkOne} />
-      <View style={styles.watermarkTwo} />
-      <Svg
-        width="100%"
-        height="100%"
-        viewBox={viewBox}
-        preserveAspectRatio="xMidYMid meet"
-        style={styles.svg}
-      >
+    <View onLayout={handleLayout} style={styles.container}>
+      <View {...(displayOnly ? {} : panResponder.panHandlers)} style={styles.mapSurface}>
+        <View style={styles.watermarkOne} />
+        <View style={styles.watermarkTwo} />
+        <Svg
+          width="100%"
+          height="100%"
+          viewBox={viewBox}
+          preserveAspectRatio="xMidYMid meet"
+          style={styles.svg}
+          pointerEvents="none"
+        >
         {vectorMap.shapes.map((shape) => {
           const visited = visitedCityIds.has(shape.cityId);
           const selected = selectedCityId === shape.cityId;
-          const interactionProps =
-            Platform.OS === 'web'
-              ? ({
-                  onClick: () => onSelectCity(shape.cityId),
-                  onPress: null,
-                } as unknown as { onPress: () => void })
-              : { onPress: () => onSelectCity(shape.cityId) };
 
           return (
             <Path
@@ -377,31 +529,36 @@ function ParanaMapComponent({
               fillRule="evenodd"
               stroke={selected ? '#D98117' : visited ? '#185C39' : '#587360'}
               strokeWidth={(selected ? 0.032 : 0.01) / zoom}
-              {...interactionProps}
             />
           );
         })}
-        {showLabels ? vectorMap.shapes.map((shape) => {
-          const name = cityNamesById.get(shape.cityId);
-          if (!name || (zoom < shape.labelMinZoom && shape.cityId !== selectedCityId)) return null;
-          const labelPixelSize = shape.cityId === selectedCityId ? 11 : 7.5 + Math.min(zoom, 5) * 0.45;
-          return (
-            <SvgText
-              key={`label-${shape.key}`}
-              x={shape.label.x}
-              y={shape.label.y}
-              fill="#000000"
-              fontSize={(baseLabelUnit / zoom) * labelPixelSize}
-              fontWeight="700"
-              textAnchor="middle"
-              alignmentBaseline="middle"
-              pointerEvents="none"
-            >
-              {name}
-            </SvgText>
-          );
-        }) : null}
-      </Svg>
+        </Svg>
+        <View pointerEvents="none" style={styles.labelsLayer}>
+          {visibleLabels.map((shape) => {
+            const name = cityNamesById.get(shape.cityId);
+            if (!name) return null;
+            const screenPoint = mapToScreenPoint(shape.label, layout, vectorMap.bounds, center, zoom);
+            const selected = shape.cityId === selectedCityId;
+            return (
+              <View
+                key={`label-${shape.key}`}
+                style={[styles.labelAnchor, { left: screenPoint.x - 70, top: screenPoint.y - 11 }]}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.cityLabel,
+                    { fontSize: selected ? 12 : 8 + Math.min(zoom, 5) * 0.55 },
+                    selected && styles.selectedCityLabel,
+                  ]}
+                >
+                  {name}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
 
       {!displayOnly ? <View style={styles.zoomControls}>
         <Pressable
@@ -451,6 +608,25 @@ export const ParanaMap = memo(ParanaMapComponent);
 
 const styles = StyleSheet.create({
   container: { flex: 1, overflow: 'hidden', backgroundColor: '#DCE9ED' },
+  mapSurface: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+  labelsLayer: {
+    position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 2, elevation: 2,
+  },
+  labelAnchor: {
+    position: 'absolute', width: 140, height: 22, alignItems: 'center', justifyContent: 'center',
+  },
+  cityLabel: {
+    maxWidth: 132,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 3,
+    overflow: 'hidden',
+    color: '#000000',
+    backgroundColor: 'rgba(255, 255, 255, 0.86)',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  selectedCityLabel: { backgroundColor: '#FFFFFF', fontWeight: '900' },
   svg: { zIndex: 1 },
   watermarkOne: {
     position: 'absolute',

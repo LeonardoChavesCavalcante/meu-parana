@@ -22,8 +22,10 @@ type Props = {
   visit?: Visit;
   saving: boolean;
   editable: boolean;
+  startEditing?: boolean;
+  closeAfterSave?: boolean;
   onClose: () => void;
-  onSaveVisit: (visit: VisitForm) => void;
+  onSaveVisit: (visit: VisitForm) => Promise<boolean>;
   onRemoveVisit: () => void;
 };
 
@@ -59,7 +61,17 @@ function formatDateInput(value: string) {
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
-export function CitySheet({ city, visit, saving, editable, onClose, onSaveVisit, onRemoveVisit }: Props) {
+export function CitySheet({
+  city,
+  visit,
+  saving,
+  editable,
+  startEditing = false,
+  closeAfterSave = false,
+  onClose,
+  onSaveVisit,
+  onRemoveVisit,
+}: Props) {
   const insets = useSafeAreaInsets();
   const visited = Boolean(visit);
   const [editing, setEditing] = useState(false);
@@ -69,12 +81,12 @@ export function CitySheet({ city, visit, saving, editable, onClose, onSaveVisit,
   const [dateError, setDateError] = useState('');
 
   useEffect(() => {
-    setEditing(false);
+    setEditing(startEditing && editable);
     setConfirmingRemoval(false);
     setDate(isoToBrazilian(visit?.visitedDate || todayIso()));
     setUserInfo(visit?.userInfo || '');
     setDateError('');
-  }, [city?.ibgeCode, visit?.visitedDate, visit?.userInfo]);
+  }, [city?.ibgeCode, editable, startEditing, visit?.visitedDate, visit?.userInfo]);
 
   const close = () => {
     setEditing(false);
@@ -89,15 +101,17 @@ export function CitySheet({ city, visit, saving, editable, onClose, onSaveVisit,
     setEditing(true);
   };
 
-  const submit = () => {
+  const submit = async () => {
     const visitedDate = brazilianToIso(date);
     if (!visitedDate) {
       setDateError('Informe uma data válida no formato DD/MM/AAAA.');
       return;
     }
     setDateError('');
-    onSaveVisit({ visitedDate, userInfo });
-    setEditing(false);
+    const saved = await onSaveVisit({ visitedDate, userInfo });
+    if (!saved) return;
+    if (closeAfterSave) close();
+    else setEditing(false);
   };
 
   return (
@@ -185,7 +199,10 @@ export function CitySheet({ city, visit, saving, editable, onClose, onSaveVisit,
                     <Pressable
                       accessibilityRole="button"
                       disabled={saving}
-                      onPress={() => setEditing(false)}
+                      onPress={() => {
+                        if (closeAfterSave) close();
+                        else setEditing(false);
+                      }}
                       style={({ pressed }) => [styles.formButton, pressed && styles.actionPressed]}
                     >
                       <Text style={styles.cancelText}>Cancelar</Text>
@@ -193,7 +210,7 @@ export function CitySheet({ city, visit, saving, editable, onClose, onSaveVisit,
                     <Pressable
                       accessibilityRole="button"
                       disabled={saving}
-                      onPress={submit}
+                      onPress={() => void submit()}
                       style={({ pressed }) => [styles.formButton, styles.saveButton, pressed && styles.actionPressed]}
                     >
                       {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveText}>Salvar visita</Text>}

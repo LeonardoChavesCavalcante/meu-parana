@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "seed:cities": "node seed-cities.mjs"
+    "seed:cities": "node seed-cities.mjs",
+    "enrich:cities": "node enrich-cities.mjs"
   },
   "dependencies": {
     "firebase-admin": "^14.4.0"

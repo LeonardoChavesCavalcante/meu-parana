@@ -15,7 +15,7 @@ export function LoginScreen() {
         <View style={styles.badge}>
           <Text style={styles.badgeText}>PR</Text>
         </View>
-        <Text style={styles.title}>Meu Parana</Text>
+        <Text style={styles.title}>Meu Paraná</Text>
         <Text style={styles.subtitle}>
           Descubra o estado, marque suas viagens e acompanhe quantos municípios você já conheceu.
         </Text>

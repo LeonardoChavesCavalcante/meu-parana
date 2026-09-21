@@ -72,10 +72,28 @@ export function useMapData(visitOwnerId: string) {
     [cities],
   );
 
+  const setLocalVisit = (visit: Visit) => {
+    setVisits((current) => {
+      const next = new Map(current);
+      next.set(visit.cityId, visit);
+      return next;
+    });
+  };
+
+  const removeLocalVisit = (cityId: string) => {
+    setVisits((current) => {
+      const next = new Map(current);
+      next.delete(cityId);
+      return next;
+    });
+  };
+
   return {
     cities,
     citiesById,
     visits,
+    setLocalVisit,
+    removeLocalVisit,
     municipalityMap,
     loading: mapLoading || !citiesLoaded || !visitsLoaded,
     error,

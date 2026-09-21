@@ -1,7 +1,7 @@
 import type { ExpoConfig } from 'expo/config';
 
 const config: ExpoConfig = {
-  name: 'Meu Parana',
+  name: 'Meu Paraná',
   slug: 'meu-parana',
   version: '1.0.0',
   orientation: 'portrait',
@@ -42,6 +42,7 @@ const config: ExpoConfig = {
     },
   },
   plugins: [
+    '@maplibre/maplibre-react-native',
     'expo-sharing',
     'expo-web-browser',
   ],

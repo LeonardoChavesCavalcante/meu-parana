@@ -8,11 +8,14 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User } from 'firebase/auth';
 
+import { CityListSheet } from '../components/CityListSheet';
 import { CitySheet } from '../components/CitySheet';
-import { ParanaMap } from '../components/ParanaMap';
+import { MapLibreParanaMap } from '../components/MapLibreParanaMap';
+import { MapSettingsSheet } from '../components/MapSettingsSheet';
 import { ShareSheet } from '../components/ShareSheet';
 import { ShareMapImageSheet } from '../components/ShareMapImageSheet';
 import { useAuth } from '../context/AuthContext';
@@ -28,7 +31,10 @@ import {
 } from '../services/firestore';
 import type { MapShare, SharePermission, Visit } from '../types';
 
+const MAP_SETTINGS_KEY = '@meu-parana/map-settings-v1';
+
 export function MapScreen({ user }: { user: User }) {
+  const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
   const [activeShare, setActiveShare] = useState<MapShare | null>(null);
   const [ownedShare, setOwnedShare] = useState<MapShare | null>(null);
@@ -39,9 +45,24 @@ export function MapScreen({ user }: { user: User }) {
   const visitOwnerId = activeShare?.ownerId || user.uid;
   const canEdit = !activeShare || activeShare.permission === 'edit';
 
-  const { cities, citiesById, visits, municipalityMap, loading, error, retry } = useMapData(visitOwnerId);
+  const {
+    cities,
+    citiesById,
+    visits,
+    municipalityMap,
+    loading,
+    error,
+    retry,
+    setLocalVisit,
+    removeLocalVisit,
+  } = useMapData(visitOwnerId);
   const [selectedCityId, setSelectedCityId] = useState<string>();
-  const [showCityNames, setShowCityNames] = useState(false);
+  const [showCityNames, setShowCityNames] = useState(true);
+  const [settingsReady, setSettingsReady] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [cityListOpen, setCityListOpen] = useState(false);
+  const [citySheetFromList, setCitySheetFromList] = useState(false);
+  const [citySheetStartEditing, setCitySheetStartEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const selectedCity = selectedCityId ? citiesById.get(selectedCityId) ?? null : null;
   const selectedVisit = selectedCityId ? visits.get(selectedCityId) : undefined;
@@ -53,14 +74,48 @@ export function MapScreen({ user }: { user: User }) {
   const progress = cities.length ? Math.round((visits.size / cities.length) * 100) : 0;
   const initial = (user.displayName || user.email || 'V').charAt(0).toUpperCase();
 
-  const saveVisit = async (visit: Pick<Visit, 'visitedDate' | 'userInfo'>) => {
-    if (!selectedCity) return;
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(MAP_SETTINGS_KEY)
+      .then((stored) => {
+        if (!active || !stored) return;
+        const settings = JSON.parse(stored) as { showLabels?: boolean };
+        if (typeof settings.showLabels === 'boolean') setShowCityNames(settings.showLabels);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setSettingsReady(true);
+      });
+    return () => { active = false; };
+  }, []);
 
+  useEffect(() => {
+    if (!settingsReady) return;
+    void AsyncStorage.setItem(MAP_SETTINGS_KEY, JSON.stringify({
+      showLabels: showCityNames,
+    }));
+  }, [settingsReady, showCityNames]);
+
+  const saveVisit = async (visit: Pick<Visit, 'visitedDate' | 'userInfo'>) => {
+    if (!selectedCity) return false;
+
+    const previousVisit = visits.get(selectedCity.ibgeCode);
+    setLocalVisit({
+      cityId: selectedCity.ibgeCode,
+      cityName: selectedCity.name,
+      visitedDate: visit.visitedDate,
+      userInfo: visit.userInfo.trim(),
+      updatedAt: new Date(),
+    });
     setSaving(true);
     try {
       await saveCityVisit(visitOwnerId, selectedCity, visit);
+      return true;
     } catch {
+      if (previousVisit) setLocalVisit(previousVisit);
+      else removeLocalVisit(selectedCity.ibgeCode);
       Alert.alert('Não foi possível salvar', 'Verifique sua conexão e tente novamente.');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -75,6 +130,33 @@ export function MapScreen({ user }: { user: User }) {
       Alert.alert('Não foi possível remover', 'Verifique sua conexão e tente novamente.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const removeVisitFromList = async (cityId: string) => {
+    const previousVisit = visits.get(cityId);
+    removeLocalVisit(cityId);
+    try {
+      await deleteCityVisit(visitOwnerId, cityId);
+    } catch {
+      if (previousVisit) setLocalVisit(previousVisit);
+      Alert.alert('Não foi possível desmarcar', 'Verifique sua conexão e tente novamente.');
+    }
+  };
+
+  const openVisitConfirmationFromList = (cityId: string) => {
+    setCitySheetFromList(true);
+    setCitySheetStartEditing(true);
+    setCityListOpen(false);
+    setTimeout(() => setSelectedCityId(cityId), 250);
+  };
+
+  const closeCitySheet = () => {
+    setSelectedCityId(undefined);
+    setCitySheetStartEditing(false);
+    if (citySheetFromList) {
+      setCitySheetFromList(false);
+      setTimeout(() => setCityListOpen(true), 250);
     }
   };
 
@@ -161,7 +243,7 @@ export function MapScreen({ user }: { user: User }) {
   };
 
   const confirmSignOut = () => {
-    Alert.alert('Sair do Meu Parana?', 'Seus registros continuarão salvos na sua conta.', [
+    Alert.alert('Sair do Meu Paraná?', 'Seus registros continuarão salvos na sua conta.', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Sair', style: 'destructive', onPress: signOut },
     ]);
@@ -170,13 +252,17 @@ export function MapScreen({ user }: { user: User }) {
   return (
     <View style={styles.container}>
       {municipalityMap ? (
-        <ParanaMap
+        <MapLibreParanaMap
           map={municipalityMap}
           cityNamesById={cityNamesById}
           visitedCityIds={visitedCityIds}
           selectedCityId={selectedCityId}
           showLabels={showCityNames}
-          onSelectCity={setSelectedCityId}
+          onSelectCity={(cityId) => {
+            setCitySheetFromList(false);
+            setCitySheetStartEditing(false);
+            setSelectedCityId(cityId);
+          }}
         />
       ) : (
         <View style={styles.mapPlaceholder} />
@@ -185,30 +271,33 @@ export function MapScreen({ user }: { user: User }) {
       <SafeAreaView edges={['top']} style={styles.topArea}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.eyebrow}>MEU PARANA</Text>
+            <Text style={styles.eyebrow}>MEU PARANÁ</Text>
             <Text style={styles.heading}>
               {activeShare ? `Mapa de ${activeShare.ownerName}` : 'Seu mapa de viagens'}
             </Text>
           </View>
           <View style={styles.headerActions}>
             <Pressable
-              accessibilityLabel={showCityNames ? 'Ocultar nomes das cidades' : 'Mostrar nomes das cidades'}
+              accessibilityLabel="Configurações do mapa"
               accessibilityRole="button"
-              onPress={() => setShowCityNames((current) => !current)}
-              style={[styles.namesButton, showCityNames && styles.namesButtonActive]}
+              onPress={() => setSettingsOpen(true)}
+              style={styles.settingsButton}
             >
-              <Text style={[styles.namesButtonText, showCityNames && styles.namesButtonTextActive]}>Aa</Text>
+              <Text style={styles.settingsButtonText}>⚙</Text>
             </Pressable>
             <Pressable
-              accessibilityLabel="Compartilhar ou abrir mapa"
+              accessibilityLabel="Compartilhar imagem nas redes sociais"
               accessibilityRole="button"
-              onPress={() => {
-                setShareMessage('');
-                setShareOpen(true);
-              }}
+              onPress={() => setImageShareOpen(true)}
               style={styles.shareHeaderButton}
             >
-              <Text style={styles.shareHeaderIcon}>↗</Text>
+              <View style={styles.socialShareIcon}>
+                <View style={[styles.socialShareLine, styles.socialShareLineTop]} />
+                <View style={[styles.socialShareLine, styles.socialShareLineBottom]} />
+                <View style={[styles.socialShareDot, styles.socialShareDotLeft]} />
+                <View style={[styles.socialShareDot, styles.socialShareDotTop]} />
+                <View style={[styles.socialShareDot, styles.socialShareDotBottom]} />
+              </View>
             </Pressable>
             <Pressable
               accessibilityLabel="Opções da conta"
@@ -266,7 +355,23 @@ export function MapScreen({ user }: { user: User }) {
         </View>
       ) : null}
 
-      <View style={styles.legend}>
+      {!loading && cities.length ? (
+        <Pressable
+          accessibilityLabel="Abrir lista de cidades"
+          accessibilityRole="button"
+          onPress={() => setCityListOpen(true)}
+          style={({ pressed }) => [
+            styles.cityListButton,
+            { bottom: insets.bottom + 88 },
+            pressed && styles.cityListButtonPressed,
+          ]}
+        >
+          <Text style={styles.cityListIcon}>☰</Text>
+          <Text style={styles.cityListButtonText}>Cidades</Text>
+        </Pressable>
+      ) : null}
+
+      <View style={[styles.legend, { bottom: insets.bottom + 16 }]}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.visitedDot]} />
           <Text style={styles.legendText}>Visitada</Text>
@@ -282,9 +387,31 @@ export function MapScreen({ user }: { user: User }) {
         visit={selectedVisit}
         saving={saving}
         editable={canEdit}
-        onClose={() => setSelectedCityId(undefined)}
+        startEditing={citySheetStartEditing}
+        closeAfterSave={citySheetFromList}
+        onClose={closeCitySheet}
         onSaveVisit={saveVisit}
         onRemoveVisit={removeVisit}
+      />
+      <CityListSheet
+        visible={cityListOpen}
+        cities={cities}
+        visits={visits}
+        editable={canEdit}
+        onClose={() => setCityListOpen(false)}
+        onConfirmVisit={openVisitConfirmationFromList}
+        onRemoveVisit={(cityId) => void removeVisitFromList(cityId)}
+      />
+      <MapSettingsSheet
+        visible={settingsOpen}
+        showLabels={showCityNames}
+        onChangeShowLabels={setShowCityNames}
+        onOpenMapShare={() => {
+          setSettingsOpen(false);
+          setShareMessage('');
+          setTimeout(() => setShareOpen(true), 300);
+        }}
+        onClose={() => setSettingsOpen(false)}
       />
       <ShareSheet
         visible={shareOpen}
@@ -300,10 +427,6 @@ export function MapScreen({ user }: { user: User }) {
           setSelectedCityId(undefined);
           setActiveShare(null);
           setShareMessage('Você voltou ao seu mapa.');
-        }}
-        onOpenImageShare={() => {
-          setShareOpen(false);
-          setTimeout(() => setImageShareOpen(true), 350);
         }}
       />
       <ShareMapImageSheet
@@ -340,12 +463,17 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 11, fontWeight: '900', color: '#2C8456', letterSpacing: 1.5 },
   heading: { marginTop: 2, fontSize: 19, fontWeight: '800', color: '#15351F' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  namesButton: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1E7C8' },
-  namesButtonActive: { backgroundColor: '#1E6A42' },
-  namesButtonText: { color: '#5E542F', fontSize: 15, fontWeight: '900' },
-  namesButtonTextActive: { color: '#FFFFFF' },
+  settingsButton: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1E7C8' },
+  settingsButtonText: { color: '#5E542F', fontSize: 20, fontWeight: '900' },
   shareHeaderButton: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E5EFE7' },
-  shareHeaderIcon: { color: '#1E6A42', fontSize: 24, fontWeight: '800', lineHeight: 25 },
+  socialShareIcon: { width: 25, height: 25 },
+  socialShareLine: { position: 'absolute', left: 7, width: 12, height: 2, borderRadius: 1, backgroundColor: '#1E6A42' },
+  socialShareLineTop: { top: 8, transform: [{ rotate: '-28deg' }] },
+  socialShareLineBottom: { top: 15, transform: [{ rotate: '28deg' }] },
+  socialShareDot: { position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: '#1E6A42' },
+  socialShareDotLeft: { left: 1, top: 9 },
+  socialShareDotTop: { right: 1, top: 2 },
+  socialShareDotBottom: { right: 1, bottom: 2 },
   avatar: {
     width: 42,
     height: 42,
@@ -397,11 +525,19 @@ const styles = StyleSheet.create({
   },
   errorText: { textAlign: 'center', color: '#784C20', lineHeight: 20 },
   retry: { marginTop: 10, textAlign: 'center', color: '#1E6A42', fontWeight: '800' },
+  cityListButton: {
+    position: 'absolute', left: 18, zIndex: 4, minHeight: 46,
+    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 15,
+    borderRadius: 16, backgroundColor: '#1E6A42', elevation: 5,
+    boxShadow: '0 5px 12px rgba(23, 53, 31, 0.18)',
+  },
+  cityListButtonPressed: { opacity: 0.8 },
+  cityListIcon: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
+  cityListButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
   legend: {
     position: 'absolute',
     left: 18,
     right: 18,
-    bottom: 26,
     minHeight: 48,
     borderRadius: 18,
     flexDirection: 'row',

@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import ViewShot, { type ViewShotRef } from 'react-native-view-shot';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { MunicipalityFeatureCollection } from '../types';
 import { ParanaMap } from './ParanaMap';
@@ -56,6 +57,7 @@ export function ShareMapImageSheet({
   mapOwnerName,
   onClose,
 }: Props) {
+  const insets = useSafeAreaInsets();
   const imageRef = useRef<ViewShotRef>(null);
   const [sharing, setSharing] = useState(false);
   const [message, setMessage] = useState('');
@@ -93,7 +95,7 @@ export function ShareMapImageSheet({
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
       <Pressable accessibilityLabel="Fechar imagem compartilhável" onPress={onClose} style={styles.backdrop} />
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { bottom: Math.max(insets.bottom, 8), paddingBottom: 22 }]}>
         <View style={styles.handle} />
         <View style={styles.headingRow}>
           <View style={styles.headingCopy}>
@@ -117,7 +119,7 @@ export function ShareMapImageSheet({
           >
             <View collapsable={false} style={styles.cardContent}>
               <View style={styles.cardHeader}>
-                <Text style={styles.brand}>MEU PARANA</Text>
+                <Text style={styles.brand}>MEU PARANÁ</Text>
                 <Text style={styles.cardTitle}>
                   {mapOwnerName ? `Mapa de ${mapOwnerName}` : 'Minhas cidades visitadas'}
                 </Text>
@@ -153,7 +155,7 @@ export function ShareMapImageSheet({
                   <View style={styles.legendDot} />
                   <Text style={styles.legendText}>Quero conhecer</Text>
                 </View>
-                <Text style={styles.footerBrand}>meuparana</Text>
+                <Text style={styles.footerBrand}>Meu Paraná</Text>
               </View>
             </View>
           </ViewShot>
@@ -175,7 +177,7 @@ export function ShareMapImageSheet({
 
 const styles = StyleSheet.create({
   backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(13, 31, 19, 0.38)' },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '94%', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 26, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#FBFCF8' },
+  sheet: { position: 'absolute', left: 0, right: 0, maxHeight: '92%', paddingHorizontal: 20, paddingTop: 10, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#FBFCF8' },
   handle: { alignSelf: 'center', width: 42, height: 5, borderRadius: 3, backgroundColor: '#C7D1C7', marginBottom: 15 },
   headingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   headingCopy: { flex: 1 },
