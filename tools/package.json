@@ -1,0 +1,12 @@
+{
+  "name": "meu-parana-tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed:cities": "node seed-cities.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.4.0"
+  }
+}

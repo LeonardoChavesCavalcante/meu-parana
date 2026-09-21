@@ -1,0 +1,121 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function hasSharedAccess(userId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(userId))
+        && get(/databases/$(database)/documents/users/$(userId)).data.shareCode is string
+        && exists(/databases/$(database)/documents/mapShares/$(get(/databases/$(database)/documents/users/$(userId)).data.shareCode))
+        && get(/databases/$(database)/documents/mapShares/$(get(/databases/$(database)/documents/users/$(userId)).data.shareCode)).data.ownerId == userId;
+    }
+
+    function canEditSharedMap(userId) {
+      return hasSharedAccess(userId)
+        && get(/databases/$(database)/documents/mapShares/$(get(/databases/$(database)/documents/users/$(userId)).data.shareCode)).data.permission == 'edit';
+    }
+
+    function validProfile() {
+      return request.resource.data.keys().hasOnly([
+        'displayName',
+        'email',
+        'photoURL',
+        'lastLoginAt',
+        'shareCode'
+      ])
+      && request.resource.data.displayName is string
+      && request.resource.data.email is string
+      && request.resource.data.photoURL is string
+      && request.resource.data.lastLoginAt is timestamp
+      && (!request.resource.data.keys().hasAny(['shareCode']) || (
+        request.resource.data.shareCode is string
+        && request.resource.data.shareCode.size() == 12
+        && existsAfter(/databases/$(database)/documents/mapShares/$(request.resource.data.shareCode))
+        && getAfter(/databases/$(database)/documents/mapShares/$(request.resource.data.shareCode)).data.ownerId == request.auth.uid
+      ));
+    }
+
+    function validVisit(visitId) {
+      return request.resource.data.keys().hasOnly([
+        'cityId',
+        'cityName',
+        'visitedDate',
+        'userInfo',
+        'updatedAt'
+      ])
+        && request.resource.data.cityId == visitId
+        && request.resource.data.cityName is string
+        && request.resource.data.visitedDate is string
+        && request.resource.data.visitedDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && request.resource.data.userInfo is string
+        && request.resource.data.userInfo.size() <= 2000
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function validShare(shareCode) {
+      return request.resource.data.keys().hasOnly([
+        'code',
+        'ownerId',
+        'ownerName',
+        'permission',
+        'createdAt',
+        'updatedAt'
+      ])
+        && request.resource.data.code == shareCode
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerName is string
+        && request.resource.data.ownerName.size() <= 200
+        && request.resource.data.permission in ['read', 'edit']
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    match /cities/{cityId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && validProfile()
+        && request.resource.data.lastLoginAt == request.time;
+      allow update: if isOwner(userId)
+        && validProfile()
+        && (request.resource.data.lastLoginAt == resource.data.lastLoginAt
+          || request.resource.data.lastLoginAt == request.time);
+      allow delete: if false;
+
+      match /visits/{visitId} {
+        allow read: if isOwner(userId) || hasSharedAccess(userId);
+        allow delete: if isOwner(userId) || canEditSharedMap(userId);
+        allow create, update: if (isOwner(userId) || canEditSharedMap(userId)) && validVisit(visitId);
+      }
+    }
+
+
+    match /mapShares/{shareCode} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && validShare(shareCode)
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && validShare(shareCode)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
