@@ -78,6 +78,33 @@ pnpm expo run:android
 
 No iOS, execute `pnpm expo run:ios` em um macOS ou use EAS Build. Depois de alterar IDs OAuth, scheme ou chave de mapas, gere um novo binário.
 
+## 5. Gerar build Android (EAS)
+
+O `mobile/eas.json` tem dois profiles:
+
+- `preview` — gera `.apk` (distribuição `internal`, instala direto no aparelho, sem Play Store).
+- `production` — gera `.aab` (App Bundle, para publicar na Play Store).
+
+```bash
+cd mobile
+eas build --platform android --profile preview
+```
+
+Se o binário `eas` não estiver instalado global, use `npx eas-cli` no lugar de `eas`.
+
+Pra forçar um build limpo (ignorando cache de uma build anterior):
+
+```bash
+eas build --platform android --profile preview --clear-cache
+```
+
+As variáveis `EXPO_PUBLIC_*` (Firebase, Google OAuth) já estão cadastradas nos ambientes `preview` e `production` do EAS (não é o `.env` local — é o sistema de *Environment Variables* do próprio EAS, vinculado ao campo `"environment"` de cada profile no `eas.json`). Não é preciso reenviar a cada build; só atualize se algum valor mudar:
+
+```bash
+eas env:list --environment preview
+eas env:create --environment preview   # ou eas env:update, pra alterar um valor existente
+```
+
 ## Comportamento do mapa
 
 - A malha municipal mínima é baixada da API oficial do IBGE, armazenada no cache local e renderizada como SVG.

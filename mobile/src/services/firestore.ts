@@ -79,14 +79,13 @@ function mapShareFromData(code: string, data: Record<string, unknown>): MapShare
     code,
     ownerId: String(data.ownerId ?? ''),
     ownerName: String(data.ownerName ?? 'Outro usuário'),
+    mapName: String(data.mapName ?? `Mapa do Paraná de ${data.ownerName ?? 'Outro usuário'}`),
     permission: data.permission === 'edit' ? 'edit' : 'read',
   };
 }
 
 export function normalizeShareCode(value: string) {
-  const match = /[?&]share=([^&#]+)/i.exec(value);
-  const rawCode = match ? decodeURIComponent(match[1]) : value;
-  return rawCode.replace(/[^a-z0-9]/gi, '').toUpperCase();
+  return value.replace(/[^a-z0-9]/gi, '').toUpperCase();
 }
 
 export async function getMapShare(value: string) {
@@ -145,6 +144,7 @@ export function subscribeToOwnedShare(
 export async function saveMapShare(
   user: User,
   permission: SharePermission,
+  mapName: string,
   currentCode?: string,
 ) {
   const code = currentCode || doc(collection(db, 'mapShares')).id.toUpperCase().slice(0, 12);
@@ -153,6 +153,7 @@ export async function saveMapShare(
     code,
     ownerId: user.uid,
     ownerName: user.displayName || user.email || 'Outro usuário',
+    mapName,
     permission,
     updatedAt: serverTimestamp(),
     ...(currentCode ? {} : { createdAt: serverTimestamp() }),

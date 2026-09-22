@@ -6,6 +6,7 @@ type Props = {
   showLabels: boolean;
   onChangeShowLabels: (show: boolean) => void;
   onOpenMapShare: () => void;
+  onOpenMapImport: () => void;
   onClose: () => void;
 };
 
@@ -14,6 +15,7 @@ export function MapSettingsSheet({
   showLabels,
   onChangeShowLabels,
   onOpenMapShare,
+  onOpenMapImport,
   onClose,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -52,8 +54,16 @@ export function MapSettingsSheet({
           <Pressable accessibilityRole="button" onPress={onOpenMapShare} style={styles.shareOption}>
             <View style={styles.shareOptionIcon}><Text style={styles.shareOptionIconText}>↔</Text></View>
             <View style={styles.shareOptionCopy}>
-              <Text style={styles.optionLabel}>Compartilhar mapa com outro usuário</Text>
-              <Text style={styles.optionDescription}>Crie um link ou código com permissão de leitura ou alteração.</Text>
+              <Text style={styles.optionLabel}>Compartilhar meu mapa</Text>
+              <Text style={styles.optionDescription}>Crie um código e defina a permissão de acesso.</Text>
+            </View>
+            <Text style={styles.arrow}>›</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={onOpenMapImport} style={styles.shareOption}>
+            <View style={styles.shareOptionIcon}><Text style={styles.shareOptionIconText}>↓</Text></View>
+            <View style={styles.shareOptionCopy}>
+              <Text style={styles.optionLabel}>Importar mapa compartilhado</Text>
+              <Text style={styles.optionDescription}>Abra um mapa usando o código recebido.</Text>
             </View>
             <Text style={styles.arrow}>›</Text>
           </Pressable>

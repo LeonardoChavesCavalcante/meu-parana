@@ -65,6 +65,7 @@ service cloud.firestore {
         'code',
         'ownerId',
         'ownerName',
+        'mapName',
         'permission',
         'createdAt',
         'updatedAt'
@@ -73,6 +74,9 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerName is string
         && request.resource.data.ownerName.size() <= 200
+        && request.resource.data.mapName is string
+        && request.resource.data.mapName.size() >= 1
+        && request.resource.data.mapName.size() <= 100
         && request.resource.data.permission in ['read', 'edit']
         && request.resource.data.updatedAt == request.time;
     }

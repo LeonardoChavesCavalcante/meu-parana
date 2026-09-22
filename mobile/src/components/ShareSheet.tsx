@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -16,32 +14,29 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MapShare, SharePermission } from '../types';
 
 type Props = {
+  mode: 'share' | 'import';
   visible: boolean;
   ownedShare: MapShare | null;
   activeShare: MapShare | null;
   busy: boolean;
   message: string;
   onClose: () => void;
-  onSaveOwnedShare: (permission: SharePermission) => void;
+  suggestedMapName: string;
+  onSaveOwnedShare: (permission: SharePermission, mapName: string) => void;
   onStopOwnedShare: () => void;
-  onOpenSharedMap: (codeOrLink: string) => void;
+  onOpenSharedMap: (code: string) => void;
   onLeaveSharedMap: () => void;
 };
 
-function shareLink(code: string) {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    return `${window.location.origin}${window.location.pathname}?share=${code}`;
-  }
-  return `meuparana://share?share=${code}`;
-}
-
 export function ShareSheet({
+  mode,
   visible,
   ownedShare,
   activeShare,
   busy,
   message,
   onClose,
+  suggestedMapName,
   onSaveOwnedShare,
   onStopOwnedShare,
   onOpenSharedMap,
@@ -49,24 +44,28 @@ export function ShareSheet({
 }: Props) {
   const insets = useSafeAreaInsets();
   const [permission, setPermission] = useState<SharePermission>('read');
+  const [mapName, setMapName] = useState(suggestedMapName);
   const [codeInput, setCodeInput] = useState('');
   const [confirmingStop, setConfirmingStop] = useState(false);
 
   useEffect(() => {
     if (ownedShare) setPermission(ownedShare.permission);
+    setMapName(ownedShare?.mapName || suggestedMapName);
     setConfirmingStop(false);
-  }, [ownedShare]);
+  }, [ownedShare, suggestedMapName]);
 
-  const link = ownedShare ? shareLink(ownedShare.code) : '';
-
-  const share = async () => {
+  const shareCode = async () => {
     if (!ownedShare) return;
     const access = ownedShare.permission === 'edit' ? 'pode visualizar e alterar' : 'pode apenas visualizar';
     await Share.share({
-      title: 'Meu mapa do Paraná',
-      message: `Veja meu mapa do Paraná. Este compartilhamento ${access}.\nCódigo: ${ownedShare.code}\n${link}`,
-      url: link,
+      title: ownedShare.mapName,
+      message: `Veja ${ownedShare.mapName}. Este compartilhamento ${access}.\nCódigo de compartilhamento: ${ownedShare.code}`,
     });
+  };
+
+  const selectPermission = (nextPermission: SharePermission) => {
+    setPermission(nextPermission);
+    onSaveOwnedShare(nextPermission, mapName.trim() || suggestedMapName);
   };
 
   return (
@@ -76,8 +75,8 @@ export function ShareSheet({
         <View style={styles.handle} />
         <View style={styles.headingRow}>
           <View style={styles.headingCopy}>
-            <Text style={styles.title}>Compartilhar mapa</Text>
-            <Text style={styles.subtitle}>Controle quem pode visualizar ou alterar suas visitas.</Text>
+            <Text style={styles.title}>{mode === 'share' ? 'Compartilhar mapa' : 'Importar mapa'}</Text>
+            <Text style={styles.subtitle}>{mode === 'share' ? 'Controle quem pode visualizar ou alterar suas visitas.' : 'Digite o código recebido de outro usuário.'}</Text>
           </View>
           <Pressable accessibilityRole="button" onPress={onClose} hitSlop={12}>
             <Text style={styles.close}>×</Text>
@@ -85,10 +84,10 @@ export function ShareSheet({
         </View>
 
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          {activeShare ? (
+          {mode === 'share' && activeShare ? (
             <View style={styles.activeBox}>
               <Text style={styles.sectionLabel}>Mapa aberto</Text>
-              <Text style={styles.activeTitle}>Mapa de {activeShare.ownerName}</Text>
+              <Text style={styles.activeTitle}>{activeShare.mapName}</Text>
               <Text style={styles.helper}>
                 {activeShare.permission === 'edit'
                   ? 'Você pode visualizar e alterar este mapa.'
@@ -100,12 +99,22 @@ export function ShareSheet({
             </View>
           ) : null}
 
-          <Text style={styles.sectionLabel}>Compartilhar meu mapa</Text>
-          <Text style={styles.fieldLabel}>Permissão do convite</Text>
+          {mode === 'share' ? <>
+            <Text style={styles.fieldLabel}>Nome do mapa</Text>
+            <TextInput
+              accessibilityLabel="Nome do mapa"
+              maxLength={100}
+              onChangeText={setMapName}
+              placeholder={suggestedMapName}
+              style={styles.input}
+              value={mapName}
+            />
+            <Text style={styles.fieldLabel}>Permissão do convite</Text>
           <View style={styles.permissionRow}>
             <Pressable
               accessibilityRole="button"
-              onPress={() => setPermission('read')}
+              disabled={busy}
+              onPress={() => selectPermission('read')}
               style={[styles.permission, permission === 'read' && styles.permissionSelected]}
             >
               <Text style={[styles.permissionTitle, permission === 'read' && styles.permissionTitleSelected]}>Somente leitura</Text>
@@ -113,7 +122,8 @@ export function ShareSheet({
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              onPress={() => setPermission('edit')}
+              disabled={busy}
+              onPress={() => selectPermission('edit')}
               style={[styles.permission, permission === 'edit' && styles.permissionSelected]}
             >
               <Text style={[styles.permissionTitle, permission === 'edit' && styles.permissionTitleSelected]}>Permitir alterações</Text>
@@ -121,29 +131,16 @@ export function ShareSheet({
             </Pressable>
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={() => onSaveOwnedShare(permission)}
-            style={styles.primaryButton}
-          >
-            {busy ? <ActivityIndicator color="#FFFFFF" /> : (
-              <Text style={styles.primaryButtonText}>{ownedShare ? 'Atualizar permissão' : 'Criar convite'}</Text>
-            )}
-          </Pressable>
-
           {ownedShare ? (
             <View style={styles.inviteBox}>
-              <Text style={styles.fieldLabel}>Código</Text>
+              <Text style={styles.fieldLabel}>Código de compartilhamento</Text>
               <TextInput editable={false} selectTextOnFocus style={styles.code} value={ownedShare.code} />
-              <Text style={styles.fieldLabel}>Link</Text>
-              <TextInput editable={false} selectTextOnFocus style={styles.link} value={link} />
-              <Pressable accessibilityRole="button" onPress={() => void share()} style={styles.shareButton}>
-                <Text style={styles.shareButtonText}>Compartilhar link</Text>
+              <Pressable accessibilityRole="button" onPress={() => void shareCode()} style={styles.shareButton}>
+                <Text style={styles.shareButtonText}>Compartilhar código</Text>
               </Pressable>
               {confirmingStop ? (
                 <View style={styles.stopConfirmBox}>
-                  <Text style={styles.stopConfirmText}>O código e o link deixarão de funcionar imediatamente.</Text>
+                  <Text style={styles.stopConfirmText}>O código deixará de funcionar imediatamente.</Text>
                   <View style={styles.stopConfirmActions}>
                     <Pressable accessibilityRole="button" onPress={() => setConfirmingStop(false)} style={styles.stopChoice}>
                       <Text style={styles.secondaryButtonText}>Cancelar</Text>
@@ -160,27 +157,28 @@ export function ShareSheet({
               )}
             </View>
           ) : null}
+          </> : null}
 
-          <View style={styles.divider} />
-          <Text style={styles.sectionLabel}>Abrir mapa compartilhado</Text>
-          <Text style={styles.helper}>Cole o código ou o link recebido de outro usuário.</Text>
-          <TextInput
-            accessibilityLabel="Código ou link compartilhado"
-            autoCapitalize="characters"
-            autoCorrect={false}
-            onChangeText={setCodeInput}
-            placeholder="Código ou link"
-            style={styles.input}
-            value={codeInput}
-          />
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy || !codeInput.trim()}
-            onPress={() => onOpenSharedMap(codeInput)}
-            style={[styles.secondaryButton, (!codeInput.trim() || busy) && styles.disabled]}
-          >
-            <Text style={styles.secondaryButtonText}>Abrir mapa</Text>
-          </Pressable>
+          {mode === 'import' ? <>
+            <Text style={styles.sectionLabel}>Código de compartilhamento</Text>
+            <TextInput
+              accessibilityLabel="Código de compartilhamento"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              onChangeText={setCodeInput}
+              placeholder="Código de compartilhamento"
+              style={styles.input}
+              value={codeInput}
+            />
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy || !codeInput.trim()}
+              onPress={() => onOpenSharedMap(codeInput)}
+              style={[styles.secondaryButton, (!codeInput.trim() || busy) && styles.disabled]}
+            >
+              <Text style={styles.secondaryButtonText}>Abrir mapa</Text>
+            </Pressable>
+          </> : null}
 
           {message ? <Text style={styles.message}>{message}</Text> : null}
         </ScrollView>
@@ -206,11 +204,8 @@ const styles = StyleSheet.create({
   permissionTitle: { fontSize: 13, fontWeight: '800', color: '#46564A' },
   permissionTitleSelected: { color: '#1E6A42' },
   permissionText: { marginTop: 5, fontSize: 11, lineHeight: 15, color: '#68736A' },
-  primaryButton: { minHeight: 50, marginTop: 13, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1E6A42' },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   inviteBox: { marginTop: 12, padding: 14, borderRadius: 16, backgroundColor: '#EEF4EC' },
   code: { minHeight: 43, paddingHorizontal: 12, borderRadius: 11, backgroundColor: '#FFFFFF', color: '#15351F', fontSize: 18, fontWeight: '900', letterSpacing: 1.8, textAlign: 'center' },
-  link: { minHeight: 43, paddingHorizontal: 12, borderRadius: 11, backgroundColor: '#FFFFFF', color: '#425348', fontSize: 12 },
   shareButton: { minHeight: 44, marginTop: 11, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DCEBDF' },
   shareButtonText: { color: '#1E6A42', fontWeight: '800' },
   stopButton: { minHeight: 39, marginTop: 3, alignItems: 'center', justifyContent: 'center' },

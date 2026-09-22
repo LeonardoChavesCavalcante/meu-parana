@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -15,6 +14,7 @@ import type { User } from 'firebase/auth';
 import { CityListSheet } from '../components/CityListSheet';
 import { CitySheet } from '../components/CitySheet';
 import { MapLibreParanaMap } from '../components/MapLibreParanaMap';
+import { MapPickerSheet } from '../components/MapPickerSheet';
 import { MapSettingsSheet } from '../components/MapSettingsSheet';
 import { ShareSheet } from '../components/ShareSheet';
 import { ShareMapImageSheet } from '../components/ShareMapImageSheet';
@@ -32,13 +32,22 @@ import {
 import type { MapShare, SharePermission, Visit } from '../types';
 
 const MAP_SETTINGS_KEY = '@meu-parana/map-settings-v1';
+const MAP_SELECTION_KEY = '@meu-parana/map-selection-v1';
+
+type StoredMaps = {
+  importedMaps: MapShare[];
+  lastMap: { kind: 'own' } | { kind: 'shared'; code: string };
+};
 
 export function MapScreen({ user }: { user: User }) {
   const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
   const [activeShare, setActiveShare] = useState<MapShare | null>(null);
   const [ownedShare, setOwnedShare] = useState<MapShare | null>(null);
+  const [importedMaps, setImportedMaps] = useState<MapShare[]>([]);
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareMode, setShareMode] = useState<'share' | 'import'>('share');
   const [imageShareOpen, setImageShareOpen] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
@@ -73,6 +82,16 @@ export function MapScreen({ user }: { user: User }) {
   );
   const progress = cities.length ? Math.round((visits.size / cities.length) * 100) : 0;
   const initial = (user.displayName || user.email || 'V').charAt(0).toUpperCase();
+  const suggestedMapName = `Mapa do Paraná de ${(user.displayName || user.email || 'você').split(' ')[0]}`;
+  const ownMapName = ownedShare?.mapName || suggestedMapName;
+  const mapSelectionKey = `${MAP_SELECTION_KEY}:${user.uid}`;
+
+  const persistMaps = useCallback(async (maps: MapShare[], lastMap: StoredMaps['lastMap']) => {
+    await AsyncStorage.setItem(mapSelectionKey, JSON.stringify({
+      importedMaps: maps,
+      lastMap,
+    } satisfies StoredMaps));
+  }, [mapSelectionKey]);
 
   useEffect(() => {
     let active = true;
@@ -95,6 +114,27 @@ export function MapScreen({ user }: { user: User }) {
       showLabels: showCityNames,
     }));
   }, [settingsReady, showCityNames]);
+
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(mapSelectionKey)
+      .then(async (stored) => {
+        if (!active || !stored) return;
+        const saved = JSON.parse(stored) as Partial<StoredMaps>;
+        const maps = Array.isArray(saved.importedMaps) ? saved.importedMaps : [];
+        setImportedMaps(maps);
+        if (saved.lastMap?.kind !== 'shared') return;
+        const lastSharedCode = saved.lastMap.code;
+        try {
+          const share = await getMapShare(lastSharedCode);
+          if (active && share.ownerId !== user.uid) setActiveShare(share);
+        } catch {
+          if (active) void persistMaps(maps.filter((map) => map.code !== lastSharedCode), { kind: 'own' });
+        }
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [mapSelectionKey, persistMaps, user.uid]);
 
   const saveVisit = async (visit: Pick<Visit, 'visitedDate' | 'userInfo'>) => {
     if (!selectedCity) return false;
@@ -160,25 +200,29 @@ export function MapScreen({ user }: { user: User }) {
     }
   };
 
-  const openSharedMap = useCallback(async (codeOrLink: string) => {
+  const openSharedMap = useCallback(async (code: string) => {
     setShareBusy(true);
     setShareMessage('');
     try {
-      const share = await getMapShare(codeOrLink);
+      const share = await getMapShare(code);
       if (share.ownerId === user.uid) {
         setActiveShare(null);
-        setShareMessage('Este convite pertence ao seu próprio mapa.');
+        await persistMaps(importedMaps, { kind: 'own' });
+        setShareMessage('Seu mapa foi aberto.');
       } else {
         setSelectedCityId(undefined);
         setActiveShare(share);
-        setShareMessage(`Mapa de ${share.ownerName} aberto.`);
+        const maps = [share, ...importedMaps.filter((map) => map.code !== share.code)];
+        setImportedMaps(maps);
+        await persistMaps(maps, { kind: 'shared', code: share.code });
+        setShareMessage(`${share.mapName} foi aberto.`);
       }
     } catch (reason) {
       setShareMessage(reason instanceof Error ? reason.message : 'Não foi possível abrir o compartilhamento.');
     } finally {
       setShareBusy(false);
     }
-  }, [user.uid]);
+  }, [importedMaps, persistMaps, user.uid]);
 
   useEffect(
     () => subscribeToOwnedShare(user.uid, setOwnedShare, () => setOwnedShare(null)),
@@ -190,34 +234,35 @@ export function MapScreen({ user }: { user: User }) {
     return subscribeToMapShare(
       activeShare.code,
       (share) => {
-        if (share) setActiveShare(share);
+        if (share) {
+          setActiveShare(share);
+          setImportedMaps((maps) => {
+            const updated = maps.map((map) => map.code === share.code ? share : map);
+            void persistMaps(updated, { kind: 'shared', code: share.code });
+            return updated;
+          });
+        }
         else {
           setActiveShare(null);
-          setShareMessage('O proprietário encerrou este compartilhamento.');
+          setImportedMaps((maps) => {
+            const remaining = maps.filter((map) => map.code !== activeShare.code);
+            void persistMaps(remaining, { kind: 'own' });
+            return remaining;
+          });
+          setShareMessage('O compartilhamento foi encerrado.');
           setShareOpen(true);
         }
       },
       () => setShareMessage('Não foi possível atualizar a permissão do compartilhamento.'),
     );
-  }, [activeShare?.code]);
+  }, [activeShare?.code, persistMaps]);
 
-  useEffect(() => {
-    const handleUrl = (url: string | null) => {
-      if (!url || !/[?&]share=/i.test(url)) return;
-      setShareOpen(true);
-      void openSharedMap(url);
-    };
-    void Linking.getInitialURL().then(handleUrl);
-    const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
-    return () => subscription.remove();
-  }, [openSharedMap]);
-
-  const saveOwnedShare = async (permission: SharePermission) => {
+  const saveOwnedShare = async (permission: SharePermission, mapName: string) => {
     setShareBusy(true);
     setShareMessage('');
     try {
-      await saveMapShare(user, permission, ownedShare?.code);
-      setShareMessage(ownedShare ? 'Permissão atualizada.' : 'Convite criado. Agora compartilhe o código ou link.');
+      await saveMapShare(user, permission, mapName, ownedShare?.code);
+      setShareMessage(ownedShare ? 'Permissão atualizada.' : 'Código de compartilhamento criado.');
     } catch (reason) {
       setShareMessage(
         reason instanceof Error
@@ -234,7 +279,7 @@ export function MapScreen({ user }: { user: User }) {
     setShareBusy(true);
     try {
       await stopMapShare(user.uid, ownedShare.code);
-      setShareMessage('Compartilhamento encerrado. O link anterior não funciona mais.');
+      setShareMessage('Compartilhamento encerrado. O código anterior não funciona mais.');
     } catch {
       setShareMessage('Não foi possível encerrar o compartilhamento.');
     } finally {
@@ -270,12 +315,18 @@ export function MapScreen({ user }: { user: User }) {
 
       <SafeAreaView edges={['top']} style={styles.topArea}>
         <View style={styles.header}>
-          <View>
+          <Pressable
+            accessibilityHint="Abre a lista de mapas disponíveis"
+            accessibilityLabel="Selecionar mapa"
+            accessibilityRole="button"
+            onPress={() => setMapPickerOpen(true)}
+          >
             <Text style={styles.eyebrow}>MEU PARANÁ</Text>
             <Text style={styles.heading}>
-              {activeShare ? `Mapa de ${activeShare.ownerName}` : 'Seu mapa de viagens'}
+              {activeShare ? activeShare.mapName : 'Seu mapa de viagens'}
             </Text>
-          </View>
+            <Text style={styles.headingOwner}>{activeShare ? activeShare.ownerName : 'Seu mapa'}</Text>
+          </Pressable>
           <View style={styles.headerActions}>
             <Pressable
               accessibilityLabel="Configurações do mapa"
@@ -320,17 +371,6 @@ export function MapScreen({ user }: { user: User }) {
             <View style={[styles.progressFill, { width: `${progress}%` }]} />
           </View>
         </View>
-        {activeShare ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setShareOpen(true)}
-            style={styles.sharedBanner}
-          >
-            <Text style={styles.sharedBannerText}>
-              {activeShare.permission === 'edit' ? 'Alterações permitidas' : 'Somente leitura'} · toque para gerenciar
-            </Text>
-          </Pressable>
-        ) : null}
       </SafeAreaView>
 
       {loading ? (
@@ -408,25 +448,52 @@ export function MapScreen({ user }: { user: User }) {
         onChangeShowLabels={setShowCityNames}
         onOpenMapShare={() => {
           setSettingsOpen(false);
+          setShareMode('share');
+          setShareMessage('');
+          setTimeout(() => setShareOpen(true), 300);
+        }}
+        onOpenMapImport={() => {
+          setSettingsOpen(false);
+          setShareMode('import');
           setShareMessage('');
           setTimeout(() => setShareOpen(true), 300);
         }}
         onClose={() => setSettingsOpen(false)}
       />
+      <MapPickerSheet
+        visible={mapPickerOpen}
+        activeShare={activeShare}
+        importedMaps={importedMaps}
+        ownMapName={ownMapName}
+        onClose={() => setMapPickerOpen(false)}
+        onSelectOwnMap={() => {
+          setSelectedCityId(undefined);
+          setActiveShare(null);
+          setMapPickerOpen(false);
+          void persistMaps(importedMaps, { kind: 'own' });
+        }}
+        onSelectImportedMap={(share) => {
+          setMapPickerOpen(false);
+          void openSharedMap(share.code);
+        }}
+      />
       <ShareSheet
         visible={shareOpen}
+        mode={shareMode}
         ownedShare={ownedShare}
         activeShare={activeShare}
         busy={shareBusy}
         message={shareMessage}
         onClose={() => setShareOpen(false)}
-        onSaveOwnedShare={(permission) => void saveOwnedShare(permission)}
+        suggestedMapName={suggestedMapName}
+        onSaveOwnedShare={(permission, mapName) => void saveOwnedShare(permission, mapName)}
         onStopOwnedShare={() => void stopOwnedSharing()}
         onOpenSharedMap={(value) => void openSharedMap(value)}
         onLeaveSharedMap={() => {
           setSelectedCityId(undefined);
           setActiveShare(null);
-          setShareMessage('Você voltou ao seu mapa.');
+          void persistMaps(importedMaps, { kind: 'own' });
+          setShareMessage('Seu mapa foi aberto.');
         }}
       />
       <ShareMapImageSheet
@@ -462,6 +529,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: { fontSize: 11, fontWeight: '900', color: '#2C8456', letterSpacing: 1.5 },
   heading: { marginTop: 2, fontSize: 19, fontWeight: '800', color: '#15351F' },
+  headingOwner: { marginTop: 1, fontSize: 12, fontWeight: '700', color: '#68776B' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   settingsButton: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1E7C8' },
   settingsButtonText: { color: '#5E542F', fontSize: 20, fontWeight: '900' },
@@ -497,8 +565,6 @@ const styles = StyleSheet.create({
   progressPercent: { position: 'absolute', right: 16, top: 12, fontWeight: '800', color: '#1E6A42' },
   progressTrack: { height: 5, borderRadius: 3, marginTop: 8, overflow: 'hidden', backgroundColor: '#DCE7DD' },
   progressFill: { height: '100%', borderRadius: 3, backgroundColor: '#38A169' },
-  sharedBanner: { alignSelf: 'center', marginTop: 7, minHeight: 34, paddingHorizontal: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(37, 93, 111, 0.92)' },
-  sharedBannerText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   statusCard: {
     position: 'absolute',
     top: '47%',

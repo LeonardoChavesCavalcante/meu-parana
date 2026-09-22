@@ -20,6 +20,7 @@ export type MapShare = {
   code: string;
   ownerId: string;
   ownerName: string;
+  mapName: string;
   permission: SharePermission;
 };
 
