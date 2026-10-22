@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "public": "docs",
+    "cleanUrls": true,
+    "ignore": [
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}
