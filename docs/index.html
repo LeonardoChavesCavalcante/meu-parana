@@ -3,28 +3,44 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Política de privacidade do aplicativo Meu Paraná.">
+  <meta name="description" content="Política de privacidade do aplicativo Meu Paraná: dados usados, compartilhamento, segurança e exclusão de conta.">
   <title>Política de Privacidade | Meu Paraná</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="hero"><div class="wrap">
-    <div class="top"><a class="brand" href="./"><span class="mark" aria-hidden="true">✦</span> Meu Paraná</a><nav aria-label="Navegação"><a href="./" aria-current="page">Privacidade</a><a href="excluir-conta.html">Excluir conta</a></nav></div>
-    <p class="eyebrow">Transparência de dados</p>
-    <h1>Política de Privacidade</h1>
-    <p class="lead">Como o aplicativo Meu Paraná usa e protege as informações necessárias para criar e compartilhar seu mapa de cidades visitadas.</p>
-    <p class="updated">Última atualização: 22 de outubro de 2026</p>
+  <header class="site-header"><div class="container header-inner">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">PR</span>Meu Paraná</a>
+    <nav class="site-nav" aria-label="Navegação principal"><a href="/" aria-current="page">Privacidade</a><a href="/excluir-conta">Excluir conta</a></nav>
   </div></header>
-  <main class="wrap content">
-    <section class="card"><h2>Quem é o responsável</h2><p>O Meu Paraná é responsável pelo tratamento dos dados descritos nesta página. Para dúvidas sobre privacidade ou solicitações relacionadas aos seus dados, escreva para <a href="mailto:leonardo.chavescavalcante@gmail.com">leonardo.chavescavalcante@gmail.com</a>.</p></section>
-    <section class="card"><h2>Dados que usamos</h2><ul><li><strong>Conta:</strong> identificador da conta, nome, endereço de e-mail e foto do perfil fornecidos pelo login com Google.</li><li><strong>Mapa:</strong> cidades marcadas como visitadas, datas de visita e anotações que você inserir.</li><li><strong>Compartilhamento:</strong> nome do mapa, códigos e permissões de acesso, além dos vínculos necessários para permitir que outras pessoas vejam ou editem um mapa compartilhado.</li><li><strong>No aparelho:</strong> preferência de tema, seleção de mapas e dados de mapa em cache, para o funcionamento do aplicativo.</li></ul><p>O aplicativo não precisa da sua localização em tempo real para marcar cidades visitadas. Você escolhe manualmente quais informações registra.</p></section>
-    <section class="card"><h2>Para que usamos os dados</h2><p>Usamos esses dados para autenticar sua conta, salvar e sincronizar seu mapa, mostrar suas visitas e anotações, permitir compartilhamentos conforme as permissões escolhidas e prestar suporte quando solicitado. Não vendemos seus dados pessoais.</p></section>
-    <section class="card"><h2>Compartilhamento e serviços externos</h2><p>Quando você gera e envia um código ou link de compartilhamento, quem recebe acesso pode visualizar seu nome e as informações do mapa. Se você conceder permissão de escrita, essa pessoa também pode alterar as visitas e anotações do mapa compartilhado. Você pode encerrar o compartilhamento no aplicativo.</p><p>Usamos o Google para login e o Firebase Authentication e Cloud Firestore para autenticação e armazenamento. O aplicativo também consulta dados de municípios do IBGE e carrega mapas de serviços de mapas externos. Esses serviços podem tratar dados técnicos necessários à conexão, como endereço IP, conforme suas próprias políticas.</p></section>
-    <section class="card"><h2>Armazenamento e segurança</h2><p>Os dados da conta e do mapa ficam armazenados nos serviços do Firebase, com acesso controlado por autenticação e regras de permissão. Preferências e cache ficam no seu aparelho. Nenhum sistema conectado à internet oferece segurança absoluta; mantemos controles para limitar o acesso aos dados do aplicativo.</p></section>
-    <section class="card"><h2>Por quanto tempo guardamos os dados</h2><p>Mantemos os dados da conta e do mapa enquanto sua conta estiver ativa ou até que você os exclua. Ao excluir a conta, o aplicativo remove o perfil, as visitas, as anotações e os compartilhamentos associados dos dados ativos do serviço, além da autenticação do Meu Paraná. Dados locais podem permanecer no aparelho até a remoção do aplicativo ou limpeza dos dados do dispositivo.</p></section>
-    <section class="card"><h2>Seus controles e exclusão</h2><p>Você pode editar ou apagar visitas e anotações no aplicativo, encerrar compartilhamentos e excluir a conta em <strong>Configurações → Excluir minha conta</strong>. A exclusão exige uma confirmação explícita e encerra a sessão. Sua conta Google permanece ativa.</p><p>Se não conseguir acessar o aplicativo, consulte a <a href="excluir-conta.html">página de solicitação de exclusão de conta</a> ou escreva para o contato acima. Podemos solicitar informações para confirmar que a conta é sua antes de atender ao pedido.</p></section>
-    <section class="card"><h2>Alterações nesta política</h2><p>Esta página pode ser atualizada quando o funcionamento do aplicativo ou as práticas de tratamento de dados mudarem. A data da última atualização aparece no início do documento.</p></section>
+  <div class="hero"><div class="container hero-inner">
+    <p class="eyebrow">Meu Paraná / Informações legais</p>
+    <h1>Política de Privacidade</h1>
+    <p class="lead">Entenda quais informações são necessárias para salvar e compartilhar seu mapa de cidades visitadas e como você pode controlá-las.</p>
+    <p class="updated">Última atualização: 22 de outubro de 2026</p>
+  </div></div>
+  <main class="container page-grid">
+    <nav class="toc" aria-label="Nesta página">
+      <p class="toc-heading">Nesta página</p>
+      <a href="#responsavel">Responsável e contato</a>
+      <a href="#dados">Dados utilizados</a>
+      <a href="#finalidades">Finalidades</a>
+      <a href="#compartilhamento">Compartilhamento</a>
+      <a href="#seguranca">Segurança</a>
+      <a href="#retencao">Retenção</a>
+      <a href="#controles">Seus controles</a>
+      <a href="#alteracoes">Alterações</a>
+    </nav>
+    <div class="legal-content">
+      <section class="legal-section" id="responsavel"><span class="section-number">01</span><div><h2>Responsável e contato</h2><p>O Meu Paraná é responsável pelo tratamento dos dados descritos nesta política. Para dúvidas sobre privacidade ou solicitações relacionadas aos seus dados, escreva para <a class="contact-email" href="mailto:leonardo.chavescavalcante@gmail.com">leonardo.chavescavalcante@gmail.com</a>.</p></div></section>
+      <section class="legal-section" id="dados"><span class="section-number">02</span><div><h2>Dados utilizados</h2><ul><li><strong>Conta:</strong> identificador da conta, nome, endereço de e-mail e foto do perfil fornecidos pelo login com Google.</li><li><strong>Mapa:</strong> cidades marcadas como visitadas, datas de visita e anotações que você inserir.</li><li><strong>Compartilhamento:</strong> nome do mapa, códigos e permissões de acesso, além dos vínculos necessários para permitir que outras pessoas vejam ou editem um mapa compartilhado.</li><li><strong>No aparelho:</strong> preferência de tema, seleção de mapas e dados de mapa em cache, para o funcionamento do aplicativo.</li></ul><p>O aplicativo não precisa da sua localização em tempo real para marcar cidades visitadas. Você escolhe manualmente quais informações registra.</p></div></section>
+      <section class="legal-section" id="finalidades"><span class="section-number">03</span><div><h2>Para que usamos os dados</h2><p>Usamos esses dados para autenticar sua conta, salvar e sincronizar seu mapa, mostrar suas visitas e anotações, permitir compartilhamentos conforme as permissões escolhidas e prestar suporte quando solicitado. Não vendemos seus dados pessoais.</p></div></section>
+      <section class="legal-section" id="compartilhamento"><span class="section-number">04</span><div><h2>Compartilhamento e serviços externos</h2><p>Quando você gera e envia um código ou link de compartilhamento, quem recebe acesso pode visualizar seu nome e as informações do mapa. Se você conceder permissão de escrita, essa pessoa também pode alterar as visitas e anotações do mapa compartilhado. Você pode encerrar o compartilhamento no aplicativo.</p><p>Usamos o Google para login e o Firebase Authentication e Cloud Firestore para autenticação e armazenamento. O aplicativo também consulta dados de municípios do IBGE e carrega mapas de serviços de mapas externos. Esses serviços podem tratar dados técnicos necessários à conexão, como endereço IP, conforme suas próprias políticas.</p></div></section>
+      <section class="legal-section" id="seguranca"><span class="section-number">05</span><div><h2>Armazenamento e segurança</h2><p>Os dados da conta e do mapa ficam armazenados nos serviços do Firebase, com acesso controlado por autenticação e regras de permissão. Preferências e cache ficam no seu aparelho. Mantemos controles para limitar o acesso aos dados do aplicativo.</p></div></section>
+      <section class="legal-section" id="retencao"><span class="section-number">06</span><div><h2>Por quanto tempo guardamos os dados</h2><p>Mantemos os dados da conta e do mapa enquanto sua conta estiver ativa ou até que você os exclua. Ao excluir a conta, o aplicativo remove o perfil, as visitas, as anotações e os compartilhamentos associados dos dados ativos do serviço, além da autenticação do Meu Paraná. Dados locais podem permanecer no aparelho até a remoção do aplicativo ou limpeza dos dados do dispositivo.</p></div></section>
+      <section class="legal-section" id="controles"><span class="section-number">07</span><div><h2>Seus controles e exclusão</h2><p>Você pode editar ou apagar visitas e anotações no aplicativo, encerrar compartilhamentos e excluir a conta em <strong>Configurações → Excluir minha conta</strong>. A exclusão exige uma confirmação explícita e encerra a sessão. Sua conta Google permanece ativa.</p><p>Se não conseguir acessar o aplicativo, consulte a <a href="/excluir-conta">página de solicitação de exclusão de conta</a> ou escreva para o contato acima. Podemos solicitar informações para confirmar que a conta é sua antes de atender ao pedido.</p></div></section>
+      <section class="legal-section" id="alteracoes"><span class="section-number">08</span><div><h2>Alterações nesta política</h2><p>Esta página pode ser atualizada quando o funcionamento do aplicativo ou as práticas de tratamento de dados mudarem. A data da última atualização aparece no início do documento.</p></div></section>
+    </div>
   </main>
-  <footer class="footer"><div class="wrap"><span>© 2026 Meu Paraná</span><span><a href="excluir-conta.html">Solicitar exclusão de conta</a> · <a href="mailto:leonardo.chavescavalcante@gmail.com">Contato</a></span></div></footer>
+  <footer class="site-footer"><div class="container footer-inner"><span>© 2026 Meu Paraná</span><span><a href="/excluir-conta">Excluir conta</a><a href="mailto:leonardo.chavescavalcante@gmail.com">Contato</a></span></div></footer>
 </body>
 </html>
